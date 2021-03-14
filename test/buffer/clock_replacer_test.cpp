@@ -60,4 +60,33 @@ TEST(ClockReplacerTest, SampleTest) {
   EXPECT_EQ(4, value);
 }
 
+void MultiThreadRunner(ClockReplacer *const clock_replacer) {
+  for (int ii = 0; ii < 1000; ++ii) {
+    clock_replacer->Unpin(ii);
+
+    int value;
+    clock_replacer->Victim(&value);
+  }
+
+  for (int ii = 0; ii < 1000; ++ii) {
+    clock_replacer->Unpin(ii);
+
+    clock_replacer->Pin(ii);
+  }
+}
+
+TEST(ClockReplacerTest, MultiThreadTest) {
+  ClockReplacer clock_replacer(50);
+  const int kNumThreads = 50;
+  std::vector<std::thread> thread_vec;
+  for (int ii = 0; ii < kNumThreads; ++ii) {
+    thread_vec.push_back(std::thread(MultiThreadRunner, &clock_replacer));
+  }
+
+  for (int ii = 0; ii < kNumThreads; ++ii) {
+    thread_vec[ii].join();
+  }
+  EXPECT_EQ(0, clock_replacer.Size());
+}
+
 }  // namespace bustub

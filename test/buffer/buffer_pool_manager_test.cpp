@@ -14,9 +14,73 @@
 #include <cstdio>
 #include <random>
 #include <string>
+#include <thread>
 #include "gtest/gtest.h"
 
+using namespace std;
+
 namespace bustub {
+
+void WriteDataRead(BufferPoolManager *const bpm) {
+  std::random_device r;
+  std::default_random_engine rng(r());
+  std::uniform_int_distribution<char> uniform_dist(0);
+
+  char random_binary_data[PAGE_SIZE];
+  // Generate random binary data
+  for (char &i : random_binary_data) {
+    i = uniform_dist(rng);
+  }
+
+  // Terminal character insertion.
+  random_binary_data[PAGE_SIZE / 2] = '\0';
+  random_binary_data[PAGE_SIZE - 1] = '\0';
+
+  page_id_t page_id;
+  Page *page = nullptr;
+
+  // Keep trying to allocate a page until we get one.
+  while (!page) {
+    page = bpm->NewPage(&page_id);
+  }
+
+  // Read/Write. This will fill page data.
+  std::memcpy(page->GetData(), random_binary_data, PAGE_SIZE);
+  EXPECT_EQ(0, std::memcmp(page->GetData(), random_binary_data, PAGE_SIZE));
+
+  // Let's unpin and sleep for a random amount of time.
+  bpm->UnpinPage(page_id, true /* dirty */);
+  sleep(rand() % 10);
+
+  // Let's refetch the page and make sure contents are correct.
+  page = nullptr;
+  while (!page) {
+    page = bpm->FetchPage(page_id);
+  }
+  EXPECT_EQ(0, memcmp(page->GetData(), random_binary_data, PAGE_SIZE));
+  // Unpin page to release the frame.
+  bpm->UnpinPage(page_id, true /* dirty */);
+}
+
+TEST(BufferPoolManagerTest, MultiThreadTest) {
+  const std::string db_name = "test.db";
+  const size_t buffer_pool_size = 10;
+
+  std::uniform_int_distribution<char> uniform_dist(0);
+
+  auto *disk_manager = new DiskManager(db_name);
+  auto *bpm = new BufferPoolManager(buffer_pool_size, disk_manager);
+
+  const int kNumThreads = 50;
+  vector<thread> thread_vec;
+  for (int ii = 0; ii < kNumThreads; ++ii) {
+    thread_vec.push_back(thread(WriteDataRead, bpm));
+  }
+
+  for (size_t ii = 0; ii < thread_vec.size(); ++ii) {
+    thread_vec[ii].join();
+  }
+}
 
 // NOLINTNEXTLINE
 // Check whether pages containing terminal characters can be recovered
