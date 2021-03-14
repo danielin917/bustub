@@ -12,18 +12,70 @@
 
 #include "buffer/lru_replacer.h"
 
+using namespace std;
+
 namespace bustub {
 
-LRUReplacer::LRUReplacer(size_t num_pages) {}
+//-------------------=---------------------------------------------------------
+
+LRUReplacer::LRUReplacer(size_t num_pages) {
+
+}
+
+//-------------------=---------------------------------------------------------
 
 LRUReplacer::~LRUReplacer() = default;
 
-bool LRUReplacer::Victim(frame_id_t *frame_id) { return false; }
+bool LRUReplacer::Victim(frame_id_t *const frame_id) {
+  assert(frame_id);
+  unique_lock scoped_lock(latch_);
 
-void LRUReplacer::Pin(frame_id_t frame_id) {}
+  if (lru_list_.empty()) {
+    return false;
+  }
 
-void LRUReplacer::Unpin(frame_id_t frame_id) {}
+  *frame_id = lru_list_.front();
+  lru_map_.erase(*frame_id);
+  lru_list_.pop_front();
+  return true;
+}
 
-size_t LRUReplacer::Size() { return 0; }
+//-----------------------------------------------------------------------------
+
+void LRUReplacer::Pin(frame_id_t frame_id) {
+  unique_lock scoped_lock(latch_);
+
+  auto iter = lru_map_.find(frame_id);
+  if (iter == lru_map_.end()) {
+    // Nothing to do, we were not tracking this frame.
+    return;
+  }
+  lru_list_.erase(iter->second);
+  lru_map_.erase(iter);
+}
+
+//-----------------------------------------------------------------------------
+
+void LRUReplacer::Unpin(const frame_id_t frame_id) {
+  unique_lock scoped_lock(latch_);
+
+  auto iter = lru_map_.find(frame_id);
+  if (iter != lru_map_.end()) {
+    // We are already tracking this unpinned frame.
+    return;
+  }
+
+  lru_list_.push_back(frame_id);
+  lru_map_[frame_id] = prev(lru_list_.end());
+}
+
+//-----------------------------------------------------------------------------
+
+size_t LRUReplacer::Size() {
+  shared_lock reader_lock(latch_);
+  return lru_list_.size();
+}
+
+//-----------------------------------------------------------------------------
 
 }  // namespace bustub

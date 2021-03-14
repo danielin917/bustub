@@ -37,7 +37,8 @@ class BufferPoolManager {
    * @param disk_manager the disk manager
    * @param log_manager the log manager (for testing only: nullptr = disable logging)
    */
-  BufferPoolManager(size_t pool_size, DiskManager *disk_manager, LogManager *log_manager = nullptr);
+  BufferPoolManager(size_t pool_size, DiskManager *disk_manager,
+                    LogManager *log_manager = nullptr);
 
   /**
    * Destroys an existing BufferPoolManager.
@@ -45,7 +46,9 @@ class BufferPoolManager {
   ~BufferPoolManager();
 
   /** Grading function. Do not modify! */
-  Page *FetchPage(page_id_t page_id, bufferpool_callback_fn callback = nullptr) {
+  Page *FetchPage(page_id_t page_id,
+                  bufferpool_callback_fn callback = nullptr) {
+
     GradingCallback(callback, CallbackType::BEFORE, page_id);
     auto *result = FetchPageImpl(page_id);
     GradingCallback(callback, CallbackType::AFTER, page_id);
@@ -133,6 +136,9 @@ class BufferPoolManager {
    */
   bool FlushPageImpl(page_id_t page_id);
 
+  // Same as FlushPageImpl but mutex_ must already be grabbed.
+  bool FlushPageLocked(page_id_t page_id);
+
   /**
    * Creates a new page in the buffer pool.
    * @param[out] page_id id of created page
@@ -152,6 +158,26 @@ class BufferPoolManager {
    */
   void FlushAllPagesImpl();
 
+  // Returns a frame that is open to be used for allocation. Will perform
+  // evictions if necessary. If all frames are pinned and
+  // 'allow_pinned_evictions' is true we will evict a random page. Lock should
+  // be held before calling.
+  frame_id_t GetNextAvailableFrame();
+
+  // Evicts any current page existing in frame with 'frame_id' by flushing and
+  // removing from page table. Returns true if page was found and evicted.
+  // False otherwise. Lock should be held before calling.
+  bool MaybeEvictPageFromFrame(frame_id_t frame_id);
+
+  // Resets all data and metadata within the 'page' object. Page id will be
+  // updated to 'new_page_id' and will have 'pin_count'.
+  static void ResetPage(Page *page,
+                        page_id_t new_page_id,
+                        int pin_count = 0);
+
+  /** This latch protects the shared data structures below. */
+  std::mutex latch_;
+
   /** Number of pages in the buffer pool. */
   size_t pool_size_;
   /** Array of buffer pool pages. */
@@ -166,7 +192,5 @@ class BufferPoolManager {
   Replacer *replacer_;
   /** List of free pages. */
   std::list<frame_id_t> free_list_;
-  /** This latch protects shared data structures. We recommend updating this comment to describe what it protects. */
-  std::mutex latch_;
 };
 }  // namespace bustub

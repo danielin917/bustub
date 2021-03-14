@@ -14,6 +14,8 @@
 
 #include <list>
 #include <mutex>  // NOLINT
+#include <shared_mutex>
+#include <unordered_map>
 #include <vector>
 
 #include "buffer/replacer.h"
@@ -22,13 +24,15 @@
 namespace bustub {
 
 /**
- * LRUReplacer implements the lru replacement policy, which approximates the Least Recently Used policy.
+ * LRUReplacer implements the lru replacement policy, which approximates the
+ * Least Recently Used policy.
  */
 class LRUReplacer : public Replacer {
  public:
   /**
    * Create a new LRUReplacer.
-   * @param num_pages the maximum number of pages the LRUReplacer will be required to store
+   * @param num_pages the maximum number of pages the LRUReplacer will be
+   * required to store
    */
   explicit LRUReplacer(size_t num_pages);
 
@@ -46,7 +50,14 @@ class LRUReplacer : public Replacer {
   size_t Size() override;
 
  private:
-  // TODO(student): implement me!
+  // Latch protecting the below members.
+  std::shared_mutex latch_;
+
+  // Mapping from frame id to it's location in the LRU list.
+  std::unordered_map<frame_id_t, std::list<frame_id_t>::iterator> lru_map_;
+
+  // LRU list containing frame ids in order of unpinning.
+  std::list<frame_id_t> lru_list_;
 };
 
 }  // namespace bustub
